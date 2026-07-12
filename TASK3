@@ -1,0 +1,62 @@
+import numpy as np
+from tensorflow.keras.applications.vgg16 import VGG16, preprocess_input
+from tensorflow.keras.preprocessing.image import load_img, img_to_array
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Input, Dense, Embedding, LSTM, Add
+
+# Load pre-trained VGG16 model
+base_model = VGG16(weights='imagenet')
+
+# Remove the last classification layer
+vgg_model = Model(inputs=base_model.input,
+                  outputs=base_model.layers[-2].output)
+
+# Function to extract image features
+def extract_features(image_path):
+    image = load_img(image_path, target_size=(224, 224))
+    image = img_to_array(image)
+    image = np.expand_dims(image, axis=0)
+    image = preprocess_input(image)
+
+    features = vgg_model.predict(image, verbose=0)
+    return features
+
+# Define Image Captioning Model
+vocab_size = 5000
+max_length = 20
+
+# Image feature input
+image_input = Input(shape=(4096,))
+image_dense = Dense(256, activation='relu')(image_input)
+
+# Caption sequence input
+text_input = Input(shape=(max_length,))
+text_embed = Embedding(vocab_size, 256, mask_zero=True)(text_input)
+text_lstm = LSTM(256)(text_embed)
+
+# Combine image and text features
+decoder = Add()([image_dense, text_lstm])
+decoder = Dense(256, activation='relu')(decoder)
+
+# Predict next word
+output = Dense(vocab_size, activation='softmax')(decoder)
+
+# Build model
+model = Model(inputs=[image_input, text_input], outputs=output)
+model.compile(optimizer='adam',
+              loss='categorical_crossentropy')
+
+print("Image Captioning Model Created Successfully!")
+
+# Example: Extract features from an image
+features = extract_features("sample.jpg")
+print("Image Feature Shape:", features.shape)
+
+# Dummy caption input (for testing)
+caption = np.zeros((1, max_length))
+
+# Predict next word probabilities
+prediction = model.predict([features, caption], verbose=0)
+predicted_word = np.argmax(prediction)
+
+print("Predicted Word Index:", predicted_word)
